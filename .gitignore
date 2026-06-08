@@ -1,0 +1,24 @@
+# Secrets — never commit these
+.env
+.env.*
+*.key
+*credentials*.json
+service-account*.json
+
+# Personal / private workflow exports (this repo ships only the sanitized template)
+*personal*.json
+*-private.json
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Logs
+*.log

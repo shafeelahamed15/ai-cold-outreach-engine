@@ -1,0 +1,1042 @@
+{
+  "name": "Cold Email Automation - Safe Ramp + AI Personalization + Follow-ups",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/35 9-16 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "schedule-new-outreach",
+      "name": "Schedule - New Outreach",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "PASTE_YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "get-leads-new",
+      "name": "Get Leads (New)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ====== WARM-UP RAMP + SHARED DAILY CAP + PICK NEXT NEW LEAD ======\n// Protects the sending account: starts low and ramps up over 4 weeks.\nconst sd = $getWorkflowStaticData('global');\nconst now = new Date();\nif (!sd.startDate) sd.startDate = now.toISOString();\nconst dayNum = Math.floor((now - new Date(sd.startDate)) / 864e5) + 1;\n\nlet cap;\nif (dayNum <= 7) cap = 5;        // Week 1\nelse if (dayNum <= 14) cap = 8;  // Week 2\nelse if (dayNum <= 21) cap = 12; // Week 3\nelse cap = 15;                   // Week 4+ (raise slowly to 18-20 later)\n\nconst today = now.toISOString().slice(0, 10);\nconst rows = items.map(i => i.json);\n// Total emails sent today across BOTH new + follow-up flows (shared cap).\nconst sentToday = rows.filter(r => String(r.last_sent_at || '').slice(0, 10) === today).length;\nif (sentToday >= cap) {\n  return [{ json: { proceed: false, reason: 'Daily cap reached', cap, sentToday, dayNum } }];\n}\n\n// Pick the next brand-new lead (no status, stage 0) with a valid email.\nconst next = rows.find(r => {\n  const status = String(r.status || '').trim().toLowerCase();\n  const stage = Number(r.stage || 0);\n  const email = String(r.email || '').trim();\n  return email.includes('@') && (status === '' || status === 'pending') && (!stage || stage === 0);\n});\nif (!next) {\n  return [{ json: { proceed: false, reason: 'No new leads', cap, sentToday, dayNum } }];\n}\nreturn [{ json: { proceed: true, cap, sentToday, dayNum, lead: next, row_number: next.row_number } }];\n"
+      },
+      "id": "decide-initial",
+      "name": "Decide Initial",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.proceed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "allowed-to-send",
+      "name": "Allowed to send?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// ====== EDIT YOUR IDENTITY + OFFER HERE (4 lines only) ======\nconst SENDER_NAME = 'Your Name';\nconst OFFER = 'I build AI agent systems and outbound automation for businesses, done-for-you';\nconst PROOF = 'I recently added $20K for a SaaS client by building them an outbound system';\nconst GUARANTEE = 'I can guarantee a clear result or I work for free until I deliver it';\n// ============================================================\n\nconst lead = $json.lead || {};\n\nconst system = `You are ${SENDER_NAME} writing a SHORT, casual, confident cold email to one prospect. ${OFFER}.\n\nSTYLE RULES:\n- 3 to 4 short sentences total. Never more.\n- Plain text only. Sound like one founder writing to another: confident, direct, human, not salesy.\n- Open with \"Hey [first name],\" then ONE genuine, specific sentence about their company based on the company description provided. Make it real and personal, never generic flattery.\n- NEVER use em-dashes or double hyphens. Use commas, periods, or new sentences instead.\n- No buzzwords, no exclamation marks, no marketing-speak, no ALL CAPS, no links, no images.\n- Use ONLY the true facts below. Never invent results, numbers, clients, or claims.\n- Close with one soft call to action: offer a quick 15 minute call later today or tomorrow, and say you will send a meeting link. Do NOT paste a link.\n- Sign off on its own line with just: ${SENDER_NAME}\n\nTRUE FACTS (do not go beyond these):\n- ${PROOF}.\n- ${GUARANTEE}.\n\nOutput STRICT JSON only, no markdown, exactly:\n{\"subject\": \"...\", \"body\": \"...\"}\nThe subject must be casual, lowercase-ish, under 5 words, and must not look like an ad.`;\n\nconst userMsg = `Write the cold email now for this lead.\nFirst name: ${lead.first_name || 'there'}\nCompany: ${lead.company || ''}\nTitle: ${lead.title || ''}\nIndustry: ${lead.industry || ''}\nCompany description (use this for the personalized opening line): ${lead.company_description || 'no description available'}\n\nIf no company description is available, open with a genuine line based on their title or industry instead. Keep it to 3 or 4 short sentences. No em-dashes. Sign off as ${SENDER_NAME}.`;\n\nconst body = { model: 'claude-sonnet-4-6', max_tokens: 500, system, messages: [{ role: 'user', content: userMsg }] };\nreturn [{ json: { body } }];\n"
+      },
+      "id": "build-initial-email",
+      "name": "Build Initial Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "id": "claude-initial",
+      "name": "Claude - Initial",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Claude's JSON reply, re-attach the lead's row + email.\nconst resp = $json;\nlet text = '';\ntry { text = resp.content && resp.content[0] && resp.content[0].text ? resp.content[0].text : ''; } catch (e) { text = ''; }\ntext = text.replace(/^```json\\s*/i, '').replace(/^```\\s*/i, '').replace(/```\\s*$/i, '').trim();\nlet p;\ntry { p = JSON.parse(text); } catch (e) { p = { subject: 'quick question', body: text || 'Hi, reaching out.' }; }\n\nconst d = $('Decide Initial').item.json;\nconst lead = d.lead || {};\nreturn [{ json: {\n  to: lead.email,\n  first_name: lead.first_name || '',\n  company: lead.company || '',\n  row_number: d.row_number,\n  subject: String(p.subject || 'quick question').slice(0, 120),\n  body: String(p.body || '').trim()\n} }];\n"
+      },
+      "id": "parse-initial",
+      "name": "Parse Initial",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "send-new-email",
+      "name": "Send New Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1540,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "row-number",
+              "name": "row_number",
+              "type": "number",
+              "value": "={{ $('Parse Initial').item.json.row_number }}"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "type": "string",
+              "value": "active"
+            },
+            {
+              "id": "stage",
+              "name": "stage",
+              "type": "number",
+              "value": "1"
+            },
+            {
+              "id": "last-sent-at",
+              "name": "last_sent_at",
+              "type": "string",
+              "value": "={{ $now.toISO() }}"
+            },
+            {
+              "id": "thread-id",
+              "name": "thread_id",
+              "type": "string",
+              "value": "={{ $json.threadId }}"
+            },
+            {
+              "id": "message-id",
+              "name": "message_id",
+              "type": "string",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "id": "subject-sent",
+              "name": "subject_sent",
+              "type": "string",
+              "value": "={{ $('Parse Initial').item.json.subject }}"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "prep-update-initial",
+      "name": "Prep Update (Initial)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "PASTE_YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [
+            "row_number"
+          ],
+          "value": {}
+        },
+        "options": {}
+      },
+      "id": "update-sheet-initial",
+      "name": "Update Sheet (Initial)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1980,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ Math.floor(Math.random() * 90) + 30 }}",
+        "unit": "seconds"
+      },
+      "id": "wait-new",
+      "name": "Wait (New)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        200
+      ],
+      "webhookId": "wait-new-wh"
+    },
+    {
+      "parameters": {},
+      "id": "stop-new",
+      "name": "Stop (New)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        880,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/40 9-16 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "schedule-follow-ups",
+      "name": "Schedule - Follow-ups",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "PASTE_YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "get-leads-follow-up",
+      "name": "Get Leads (Follow-up)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        220,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ====== SHARED DAILY CAP + PICK NEXT LEAD WHOSE FOLLOW-UP IS DUE ======\nconst sd = $getWorkflowStaticData('global');\nconst now = new Date();\nif (!sd.startDate) sd.startDate = now.toISOString();\nconst dayNum = Math.floor((now - new Date(sd.startDate)) / 864e5) + 1;\n\nlet cap;\nif (dayNum <= 7) cap = 5;\nelse if (dayNum <= 14) cap = 8;\nelse if (dayNum <= 21) cap = 12;\nelse cap = 15;\n\nconst today = now.toISOString().slice(0, 10);\nconst rows = items.map(i => i.json);\nconst sentToday = rows.filter(r => String(r.last_sent_at || '').slice(0, 10) === today).length;\nif (sentToday >= cap) {\n  return [{ json: { proceed: false, reason: 'Daily cap reached' } }];\n}\n\n// Days to wait before each follow-up. stage 1 -> wait before 2nd email; stage 2 -> before 3rd.\nconst DELAY = { 1: 3, 2: 4 };\nconst daysSince = ts => ts ? (now - new Date(ts)) / 864e5 : 999;\n\nconst next = rows.find(r => {\n  const status = String(r.status || '').trim().toLowerCase();\n  const stage = Number(r.stage || 0);\n  const email = String(r.email || '').trim();\n  return email.includes('@') && status === 'active' && (stage === 1 || stage === 2) && daysSince(r.last_sent_at) >= DELAY[stage];\n});\nif (!next) {\n  return [{ json: { proceed: false, reason: 'No follow-ups due' } }];\n}\nreturn [{ json: {\n  proceed: true, cap, sentToday,\n  lead: next, row_number: next.row_number,\n  stage: Number(next.stage || 0),\n  message_id: next.message_id,\n  thread_id: next.thread_id\n} }];\n"
+      },
+      "id": "decide-follow-up",
+      "name": "Decide Follow-up",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.proceed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "follow-up-due",
+      "name": "Follow-up due?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ====== EDIT YOUR NAME HERE ======\nconst SENDER_NAME = 'Your Name';\n// =================================\n\nconst lead = $json.lead || {};\nconst stage = Number($json.stage); // 1 = sending 2nd email, 2 = sending 3rd (final) email\nconst fuNum = stage;\n\nconst system = `You are ${SENDER_NAME} writing a SHORT follow-up to a cold email the prospect did not reply to. This is follow-up number ${fuNum} of 2.\n\nRULES:\n- 1 to 3 sentences only. Shorter than a first email.\n- Friendly and low pressure. No guilt, no \"just bumping this\", no pushiness.\n- Add ONE new angle, a quick proof point, or a simple yes or no question. Do NOT repeat the whole pitch.\n- If this is follow-up number 2, make it a short, polite final check-in and offer to close the loop.\n- NEVER use em-dashes or double hyphens. No links, no images. Plain text.\n- Sign off on its own line with just: ${SENDER_NAME}\n\nOutput STRICT JSON only, no markdown, exactly:\n{\"subject\": \"\", \"body\": \"...\"}\nLeave subject as an empty string, the email is sent as a reply in the same thread.`;\n\nconst userMsg = `Prospect first name: ${lead.first_name || 'there'}\nCompany: ${lead.company || ''}\nWhat they do: ${lead.company_description || 'unknown'}`;\n\nconst body = { model: 'claude-sonnet-4-6', max_tokens: 300, system, messages: [{ role: 'user', content: userMsg }] };\nreturn [{ json: { body } }];\n"
+      },
+      "id": "build-follow-up-email",
+      "name": "Build Follow-up Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "id": "claude-follow-up",
+      "name": "Claude - Follow-up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $json;\nlet text = '';\ntry { text = resp.content && resp.content[0] && resp.content[0].text ? resp.content[0].text : ''; } catch (e) { text = ''; }\ntext = text.replace(/^```json\\s*/i, '').replace(/^```\\s*/i, '').replace(/```\\s*$/i, '').trim();\nlet p;\ntry { p = JSON.parse(text); } catch (e) { p = { subject: '', body: text || 'Just following up in case this is useful.' }; }\n\nconst d = $('Decide Follow-up').item.json;\nreturn [{ json: {\n  message_id: d.message_id,\n  thread_id: d.thread_id,\n  row_number: d.row_number,\n  stage: d.stage,\n  next_stage: Number(d.stage) + 1,\n  body: String(p.body || '').trim()\n} }];\n"
+      },
+      "id": "parse-follow-up",
+      "name": "Parse Follow-up",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "reply",
+        "messageId": "={{ $json.message_id }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "send-reply",
+      "name": "Send Reply",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1540,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "row-number",
+              "name": "row_number",
+              "type": "number",
+              "value": "={{ $('Parse Follow-up').item.json.row_number }}"
+            },
+            {
+              "id": "stage",
+              "name": "stage",
+              "type": "number",
+              "value": "={{ $('Parse Follow-up').item.json.next_stage }}"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "type": "string",
+              "value": "={{ $('Parse Follow-up').item.json.next_stage >= 3 ? 'done' : 'active' }}"
+            },
+            {
+              "id": "last-sent-at",
+              "name": "last_sent_at",
+              "type": "string",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "includeOtherFields": false,
+        "options": {}
+      },
+      "id": "prep-update-follow-up",
+      "name": "Prep Update (Follow-up)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "PASTE_YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [
+            "row_number"
+          ],
+          "value": {}
+        },
+        "options": {}
+      },
+      "id": "update-sheet-follow-up",
+      "name": "Update Sheet (Follow-up)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1980,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ Math.floor(Math.random() * 90) + 30 }}",
+        "unit": "seconds"
+      },
+      "id": "wait-follow-up",
+      "name": "Wait (Follow-up)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        620
+      ],
+      "webhookId": "wait-follow-up-wh"
+    },
+    {
+      "parameters": {},
+      "id": "stop-follow-up",
+      "name": "Stop (Follow-up)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        880,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10,13,16 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "schedule-reply-check",
+      "name": "Schedule - Reply Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 100,
+        "simple": true,
+        "filters": {
+          "q": "in:inbox newer_than:3d"
+        }
+      },
+      "id": "get-recent-inbox",
+      "name": "Get Recent Inbox",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        220,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect unique sender email addresses from recent inbox messages.\nconst emails = items.map(i => {\n  const f = i.json.from || i.json.From || '';\n  const m = String(f).match(/[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}/);\n  return m ? m[0].toLowerCase() : null;\n}).filter(Boolean);\nreturn [{ json: { senders: Array.from(new Set(emails)) } }];\n"
+      },
+      "id": "extract-reply-senders",
+      "name": "Extract Reply Senders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "PASTE_YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "get-leads-replies",
+      "name": "Get Leads (Replies)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        660,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Any 'active' lead who shows up as an inbox sender has replied -> mark 'replied'\n// so the follow-up flow stops emailing them.\nconst senders = $('Extract Reply Senders').item.json.senders || [];\nconst set = new Set(senders.map(s => String(s).toLowerCase()));\nconst rows = items.map(i => i.json);\nconst out = rows.filter(r => {\n  const email = String(r.email || '').trim().toLowerCase();\n  const status = String(r.status || '').trim().toLowerCase();\n  return email && set.has(email) && status === 'active';\n}).map(r => ({ json: { row_number: r.row_number, status: 'replied' } }));\nreturn out;\n"
+      },
+      "id": "match-repliers",
+      "name": "Match Repliers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "PASTE_YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [
+            "row_number"
+          ],
+          "value": {}
+        },
+        "options": {}
+      },
+      "id": "mark-as-replied",
+      "name": "Mark as Replied",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1100,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Cold Email Automation (Safe Ramp + AI + Follow-ups)\n\nSends personalized cold emails from Gmail/Google Workspace, ramping volume up safely so the account is not burned. Writes each email with Claude, runs a 3-step sequence, and auto-detects replies.\n\n### Setup (read SETUP-GUIDE)\n1. Connect credentials: **Gmail OAuth2**, **Google Sheets OAuth2**, and a **Header Auth** for Anthropic (name `x-api-key`, value = your API key).\n2. Paste your **Google Sheet ID** into every Google Sheets node (replace `PASTE_YOUR_GOOGLE_SHEET_ID`).\n3. Edit the 4 CONFIG lines at the top of **Build Initial Email** (and the name in **Build Follow-up Email**).\n4. Set up SPF + DKIM + DMARC on your domain before sending.\n5. Test once to yourself, then toggle the workflow **Active**.",
+        "height": 520,
+        "width": 320,
+        "color": 6
+      },
+      "id": "note-intro",
+      "name": "Note - Intro",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -360,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1) NEW OUTREACH\nEvery 35 min on weekdays 9am-4pm: picks the next new lead (within the daily ramp cap), writes a 3-4 sentence email, sends it, and marks the row stage 1 / active.",
+        "height": 120,
+        "width": 320,
+        "color": 4
+      },
+      "id": "note-flow1",
+      "name": "Note - Flow1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        880,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2) FOLLOW-UPS\nPicks leads that have not replied and are due (3 days after email 1, then 4 days after email 2). Sends a short follow-up as a reply in the SAME thread. After email 3, the lead is marked done.",
+        "height": 130,
+        "width": 340,
+        "color": 4
+      },
+      "id": "note-flow2",
+      "name": "Note - Flow2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        880,
+        470
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3) REPLY DETECTION\nA few times a day, scans the inbox for replies. Any lead who replied is marked `replied` so the follow-up flow stops emailing them.",
+        "height": 110,
+        "width": 320,
+        "color": 5
+      },
+      "id": "note-flow3",
+      "name": "Note - Flow3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        220,
+        980
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule - New Outreach": {
+      "main": [
+        [
+          {
+            "node": "Get Leads (New)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Leads (New)": {
+      "main": [
+        [
+          {
+            "node": "Decide Initial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide Initial": {
+      "main": [
+        [
+          {
+            "node": "Allowed to send?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Allowed to send?": {
+      "main": [
+        [
+          {
+            "node": "Build Initial Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop (New)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Initial Email": {
+      "main": [
+        [
+          {
+            "node": "Claude - Initial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude - Initial": {
+      "main": [
+        [
+          {
+            "node": "Parse Initial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Initial": {
+      "main": [
+        [
+          {
+            "node": "Send New Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send New Email": {
+      "main": [
+        [
+          {
+            "node": "Prep Update (Initial)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Update (Initial)": {
+      "main": [
+        [
+          {
+            "node": "Update Sheet (Initial)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Sheet (Initial)": {
+      "main": [
+        [
+          {
+            "node": "Wait (New)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule - Follow-ups": {
+      "main": [
+        [
+          {
+            "node": "Get Leads (Follow-up)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Leads (Follow-up)": {
+      "main": [
+        [
+          {
+            "node": "Decide Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide Follow-up": {
+      "main": [
+        [
+          {
+            "node": "Follow-up due?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Follow-up due?": {
+      "main": [
+        [
+          {
+            "node": "Build Follow-up Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop (Follow-up)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Follow-up Email": {
+      "main": [
+        [
+          {
+            "node": "Claude - Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude - Follow-up": {
+      "main": [
+        [
+          {
+            "node": "Parse Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Follow-up": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reply": {
+      "main": [
+        [
+          {
+            "node": "Prep Update (Follow-up)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Update (Follow-up)": {
+      "main": [
+        [
+          {
+            "node": "Update Sheet (Follow-up)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Sheet (Follow-up)": {
+      "main": [
+        [
+          {
+            "node": "Wait (Follow-up)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule - Reply Check": {
+      "main": [
+        [
+          {
+            "node": "Get Recent Inbox",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent Inbox": {
+      "main": [
+        [
+          {
+            "node": "Extract Reply Senders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Reply Senders": {
+      "main": [
+        [
+          {
+            "node": "Get Leads (Replies)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Leads (Replies)": {
+      "main": [
+        [
+          {
+            "node": "Match Repliers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Repliers": {
+      "main": [
+        [
+          {
+            "node": "Mark as Replied",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "active": false,
+  "pinData": {},
+  "meta": {
+    "templatecredstorerrorsignal": false
+  }
+}
