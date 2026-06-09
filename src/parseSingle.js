@@ -6,7 +6,7 @@ text = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$
 let p;
 try { p = JSON.parse(text); } catch (e) { p = { subject: 'quick question', body: text || 'Hi, reaching out.' }; }
 
-const d = $('Decide').item.json;
+const d = $('Pick next lead').item.json;
 const lead = d.lead || {};
 return [{ json: {
   to: lead['Email'],

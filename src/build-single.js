@@ -60,10 +60,10 @@ const markSent = (name, pos) => ({
     columns: {
       mappingMode: 'defineBelow',
       value: {
-        row_number: "={{ $('Parse').item.json.row_number }}",
+        row_number: "={{ $('Get subject & body').item.json.row_number }}",
         status: 'sent',
         sent_at: "={{ $now.toFormat('yyyy-LL-dd HH:mm') }}",
-        subject_sent: "={{ $('Parse').item.json.subject }}",
+        subject_sent: "={{ $('Get subject & body').item.json.subject }}",
       },
       matchingColumns: ['row_number'],
     },
@@ -85,44 +85,44 @@ const sticky = (name, content, pos, w, h, color) => {
 const ROW = 0, X = i => i * 220;
 
 const nodes = [
-  schedule('Schedule - Send Window', '*/35 9-16 * * 1-5', [X(0), ROW]),
-  sheetsRead('Get Leads', [X(1), ROW]),
-  codeNode('Decide', 'decideSingle.js', [X(2), ROW]),
-  ifProceed('Allowed to send?', [X(3), ROW]),
-  codeNode('Build Email', 'buildSingle.js', [X(4), ROW]),
-  claude('Write Email (Claude)', [X(5), ROW]),
-  codeNode('Parse', 'parseSingle.js', [X(6), ROW]),
-  gmailSend('Send via Gmail', [X(7), ROW]),
-  markSent('Mark Lead as Sent', [X(8), ROW]),
-  wait('Human Jitter', [X(9), ROW]),
-  noop('Stop for now', [X(4), ROW + 150]),
+  schedule('Every 35 min (weekdays 9-4)', '*/35 9-16 * * 1-5', [X(0), ROW]),
+  sheetsRead('Get leads', [X(1), ROW]),
+  codeNode('Pick next lead', 'decideSingle.js', [X(2), ROW]),
+  ifProceed('Within daily limit?', [X(3), ROW]),
+  codeNode('Build prompt', 'buildSingle.js', [X(4), ROW]),
+  claude('Write email (Claude)', [X(5), ROW]),
+  codeNode('Get subject & body', 'parseSingle.js', [X(6), ROW]),
+  gmailSend('Send email', [X(7), ROW]),
+  markSent('Mark row as sent', [X(8), ROW]),
+  wait('Wait (random)', [X(9), ROW]),
+  noop('Nothing to send', [X(4), ROW + 150]),
 
-  // Yellow overview (color omitted = default yellow), top-left.
+  // Overview sticky. Color omitted so it renders in the default yellow.
   sticky('Overview',
-`## 📧 Cold Email Sender with AI Personalization + Safe Warm-Up
+`## Cold email sender with AI personalization and a safe warm-up
 
-Sends personalized cold emails from Gmail / Google Workspace and **ramps volume up slowly** so a new domain is not flagged as spam. Claude writes a unique short email for every lead, and the workflow tracks who has been contacted so nobody is emailed twice.
+Sends one personalized cold email at a time from Gmail, lifting the daily volume gradually so a fresh domain does not get flagged. Each email is written by Claude from the lead's own company details, and every send is logged back to the sheet so no one is contacted twice.
 
 ### How it works
-- Runs every 35 minutes on weekdays, 9am to 4pm.
-- A daily cap ramps from 5 emails on week 1 up to 15 by week 4, protecting your sender reputation.
-- For each run it picks the next un-contacted lead, has Claude write a 3 to 4 sentence plain-text email, sends it, and marks the row \`sent\` with a timestamp.
-- A short random pause between sends keeps the pattern human.
+- Triggers every 35 minutes, weekdays 9am to 4pm.
+- The daily limit grows from 5 emails in week 1 to 15 by week 4, which keeps a new inbox safe.
+- Each run takes the next un-emailed lead, asks Claude for a 3 to 4 sentence plain-text email, sends it, and writes the time and subject back to the row.
+- A short random wait after each send keeps the rhythm human.
 
 ### Setup
-1. Connect **Gmail**, **Google Sheets**, and an **Anthropic** credential (HTTP Header Auth, name \`x-api-key\`).
-2. Create a Google Sheet with a \`Leads\` tab. It works out of the box with an **Apollo lead export** (columns \`Email\`, \`First Name\`, \`Company Name\`, \`Title\`, \`Industry\`, \`Company Short Description\`). Then add three tracking columns: \`status\`, \`sent_at\`, \`subject_sent\` (leave them empty). Paste the Sheet ID into both Google Sheets nodes.
-3. Edit the four config lines at the top of the **Build Email** node (your name, offer, proof, guarantee).
-4. Add SPF, DKIM and DMARC to your domain, then send one test email to yourself before going live.
+1. Connect Gmail, Google Sheets, and an Anthropic credential (Header Auth, header name \`x-api-key\`).
+2. Use a Google Sheet of leads. An Apollo export works as-is (\`Email\`, \`First Name\`, \`Company Name\`, \`Title\`, \`Company Short Description\`). Add three empty columns: \`status\`, \`sent_at\`, \`subject_sent\`. Paste the Sheet ID into both Sheets nodes.
+3. Set your name and offer in the four lines at the top of the **Build prompt** node.
+4. Add SPF, DKIM and DMARC to your domain and send yourself a test before going live.
 
 ### Customization
-Adjust the ramp caps in the **Decide** node and the sending window in the **Schedule** node.`,
+The daily limits live in the **Pick next lead** node. The schedule and send window are in the trigger.`,
     [-560, -180], 480, 700),
 
-  // White section panel behind the flow.
+  // Section label behind the row of nodes.
   sticky('Section - Outreach',
-`## Personalized outreach, one lead at a time
-Picks the next un-contacted lead within today's ramp cap, writes a tailored email with AI, sends it, and marks the row so it is never emailed twice.`,
+`## One lead per run
+Reads the sheet, picks the next person who has not been emailed yet while under today's limit, writes their email, sends it, and marks the row.`,
     [X(0) - 40, ROW - 160], 2240, 380, 7),
 ];
 
@@ -132,12 +132,12 @@ const chain = (...names) => {
   return c;
 };
 const connections = {
-  ...chain('Schedule - Send Window', 'Get Leads', 'Decide', 'Allowed to send?'),
-  'Allowed to send?': { main: [
-    [{ node: 'Build Email', type: 'main', index: 0 }],
-    [{ node: 'Stop for now', type: 'main', index: 0 }],
+  ...chain('Every 35 min (weekdays 9-4)', 'Get leads', 'Pick next lead', 'Within daily limit?'),
+  'Within daily limit?': { main: [
+    [{ node: 'Build prompt', type: 'main', index: 0 }],
+    [{ node: 'Nothing to send', type: 'main', index: 0 }],
   ] },
-  ...chain('Build Email', 'Write Email (Claude)', 'Parse', 'Send via Gmail', 'Mark Lead as Sent', 'Human Jitter'),
+  ...chain('Build prompt', 'Write email (Claude)', 'Get subject & body', 'Send email', 'Mark row as sent', 'Wait (random)'),
 };
 
 const workflow = {

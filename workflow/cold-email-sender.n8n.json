@@ -12,8 +12,8 @@
           ]
         }
       },
-      "id": "schedule-send-window",
-      "name": "Schedule - Send Window",
+      "id": "every-35-min-weekdays-9-4",
+      "name": "Every 35 min (weekdays 9-4)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
@@ -36,7 +36,7 @@
         "options": {}
       },
       "id": "get-leads",
-      "name": "Get Leads",
+      "name": "Get leads",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
@@ -48,8 +48,8 @@
       "parameters": {
         "jsCode": "// ====== WARM-UP RAMP + DAILY CAP + PICK NEXT LEAD ======\n// Protects the sending account: starts low and ramps up over 4 weeks.\nconst sd = $getWorkflowStaticData('global');\nconst now = new Date();\nif (!sd.startDate) sd.startDate = now.toISOString();\nconst dayNum = Math.floor((now - new Date(sd.startDate)) / 864e5) + 1;\n\nlet cap;\nif (dayNum <= 7) cap = 5;        // Week 1\nelse if (dayNum <= 14) cap = 8;  // Week 2\nelse if (dayNum <= 21) cap = 12; // Week 3\nelse cap = 15;                   // Week 4+ (raise slowly to 18-20 later)\n\nconst today = now.toISOString().slice(0, 10);\nconst rows = items.map(i => i.json);\nconst sentToday = rows.filter(r => String(r.sent_at || '').slice(0, 10) === today).length;\nif (sentToday >= cap) {\n  return [{ json: { proceed: false, reason: 'Daily cap reached', cap, sentToday, dayNum } }];\n}\n\n// Pick the next lead that has not been contacted yet, with a valid email.\nconst next = rows.find(r => {\n  const status = String(r.status || '').trim().toLowerCase();\n  const email = String(r['Email'] || '').trim();\n  return email.includes('@') && (status === '' || status === 'pending');\n});\nif (!next) {\n  return [{ json: { proceed: false, reason: 'No pending leads', cap, sentToday, dayNum } }];\n}\nreturn [{ json: { proceed: true, cap, sentToday, dayNum, lead: next, row_number: next.row_number } }];\n"
       },
-      "id": "decide",
-      "name": "Decide",
+      "id": "pick-next-lead",
+      "name": "Pick next lead",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -81,8 +81,8 @@
         },
         "options": {}
       },
-      "id": "allowed-to-send",
-      "name": "Allowed to send?",
+      "id": "within-daily-limit",
+      "name": "Within daily limit?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
@@ -94,8 +94,8 @@
       "parameters": {
         "jsCode": "// ============================================================\n// ====== EDIT YOUR IDENTITY + OFFER HERE (4 lines only) ======\nconst SENDER_NAME = 'Your Name';\nconst OFFER = 'I help businesses automate their outbound with AI';\nconst PROOF = 'I recently built an outbound system that added five figures in pipeline for a client';\nconst GUARANTEE = 'I can guarantee a clear result, or I work for free until I deliver it';\n// ============================================================\n\nconst lead = $json.lead || {};\n\nconst system = `You are ${SENDER_NAME} writing a SHORT, casual, confident cold email to one prospect. ${OFFER}.\n\nSTYLE RULES:\n- 3 to 4 short sentences total. Never more.\n- Plain text only. Sound like one founder writing to another: confident, direct, human, not salesy.\n- Open with \"Hey [first name],\" then ONE genuine, specific sentence about their company based on the company description provided. Make it real and personal, never generic flattery.\n- NEVER use em-dashes or double hyphens. Use commas, periods, or new sentences instead.\n- No buzzwords, no exclamation marks, no marketing-speak, no ALL CAPS, no links, no images.\n- Use ONLY the true facts below. Never invent results, numbers, clients, or claims.\n- Close with one soft call to action: offer a quick 15 minute call later today or tomorrow, and say you will send a meeting link. Do NOT paste a link.\n- Sign off on its own line with just: ${SENDER_NAME}\n\nTRUE FACTS (do not go beyond these):\n- ${PROOF}.\n- ${GUARANTEE}.\n\nOutput STRICT JSON only, no markdown, exactly:\n{\"subject\": \"...\", \"body\": \"...\"}\nThe subject must be casual, lowercase-ish, under 5 words, and must not look like an ad.`;\n\nconst userMsg = `Write the cold email now for this lead.\nFirst name: ${lead['First Name'] || 'there'}\nCompany: ${lead['Company Name'] || ''}\nTitle: ${lead['Title'] || ''}\nIndustry: ${lead['Industry'] || ''}\nCompany description (use this for the personalized opening line): ${lead['Company Short Description'] || lead['Headline'] || 'no description available'}\n\nIf no company description is available, open with a genuine line based on their title or industry instead. Keep it to 3 or 4 short sentences. No em-dashes. Sign off as ${SENDER_NAME}.`;\n\nconst body = { model: 'claude-sonnet-4-6', max_tokens: 500, system, messages: [{ role: 'user', content: userMsg }] };\nreturn [{ json: { body } }];\n"
       },
-      "id": "build-email",
-      "name": "Build Email",
+      "id": "build-prompt",
+      "name": "Build prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -128,7 +128,7 @@
         "options": {}
       },
       "id": "write-email-claude",
-      "name": "Write Email (Claude)",
+      "name": "Write email (Claude)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -138,10 +138,10 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse Claude's JSON reply, re-attach the lead's row + email.\nconst resp = $json;\nlet text = '';\ntry { text = resp.content && resp.content[0] && resp.content[0].text ? resp.content[0].text : ''; } catch (e) { text = ''; }\ntext = text.replace(/^```json\\s*/i, '').replace(/^```\\s*/i, '').replace(/```\\s*$/i, '').trim();\nlet p;\ntry { p = JSON.parse(text); } catch (e) { p = { subject: 'quick question', body: text || 'Hi, reaching out.' }; }\n\nconst d = $('Decide').item.json;\nconst lead = d.lead || {};\nreturn [{ json: {\n  to: lead['Email'],\n  first_name: lead['First Name'] || '',\n  company: lead['Company Name'] || '',\n  row_number: d.row_number,\n  subject: String(p.subject || 'quick question').slice(0, 120),\n  body: String(p.body || '').trim()\n} }];\n"
+        "jsCode": "// Parse Claude's JSON reply, re-attach the lead's row + email.\nconst resp = $json;\nlet text = '';\ntry { text = resp.content && resp.content[0] && resp.content[0].text ? resp.content[0].text : ''; } catch (e) { text = ''; }\ntext = text.replace(/^```json\\s*/i, '').replace(/^```\\s*/i, '').replace(/```\\s*$/i, '').trim();\nlet p;\ntry { p = JSON.parse(text); } catch (e) { p = { subject: 'quick question', body: text || 'Hi, reaching out.' }; }\n\nconst d = $('Pick next lead').item.json;\nconst lead = d.lead || {};\nreturn [{ json: {\n  to: lead['Email'],\n  first_name: lead['First Name'] || '',\n  company: lead['Company Name'] || '',\n  row_number: d.row_number,\n  subject: String(p.subject || 'quick question').slice(0, 120),\n  body: String(p.body || '').trim()\n} }];\n"
       },
-      "id": "parse",
-      "name": "Parse",
+      "id": "get-subject-body",
+      "name": "Get subject & body",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -161,8 +161,8 @@
           "appendAttribution": false
         }
       },
-      "id": "send-via-gmail",
-      "name": "Send via Gmail",
+      "id": "send-email",
+      "name": "Send email",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
@@ -186,10 +186,10 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "row_number": "={{ $('Parse').item.json.row_number }}",
+            "row_number": "={{ $('Get subject & body').item.json.row_number }}",
             "status": "sent",
             "sent_at": "={{ $now.toFormat('yyyy-LL-dd HH:mm') }}",
-            "subject_sent": "={{ $('Parse').item.json.subject }}"
+            "subject_sent": "={{ $('Get subject & body').item.json.subject }}"
           },
           "matchingColumns": [
             "row_number"
@@ -197,8 +197,8 @@
         },
         "options": {}
       },
-      "id": "mark-lead-as-sent",
-      "name": "Mark Lead as Sent",
+      "id": "mark-row-as-sent",
+      "name": "Mark row as sent",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
       "position": [
@@ -211,20 +211,20 @@
         "amount": "={{ Math.floor(Math.random() * 90) + 30 }}",
         "unit": "seconds"
       },
-      "id": "human-jitter",
-      "name": "Human Jitter",
+      "id": "wait-random",
+      "name": "Wait (random)",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
         1980,
         0
       ],
-      "webhookId": "human-jitter-wh"
+      "webhookId": "wait-random-wh"
     },
     {
       "parameters": {},
-      "id": "stop-for-now",
-      "name": "Stop for now",
+      "id": "nothing-to-send",
+      "name": "Nothing to send",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -234,7 +234,7 @@
     },
     {
       "parameters": {
-        "content": "## 📧 Cold Email Sender with AI Personalization + Safe Warm-Up\n\nSends personalized cold emails from Gmail / Google Workspace and **ramps volume up slowly** so a new domain is not flagged as spam. Claude writes a unique short email for every lead, and the workflow tracks who has been contacted so nobody is emailed twice.\n\n### How it works\n- Runs every 35 minutes on weekdays, 9am to 4pm.\n- A daily cap ramps from 5 emails on week 1 up to 15 by week 4, protecting your sender reputation.\n- For each run it picks the next un-contacted lead, has Claude write a 3 to 4 sentence plain-text email, sends it, and marks the row `sent` with a timestamp.\n- A short random pause between sends keeps the pattern human.\n\n### Setup\n1. Connect **Gmail**, **Google Sheets**, and an **Anthropic** credential (HTTP Header Auth, name `x-api-key`).\n2. Create a Google Sheet with a `Leads` tab. It works out of the box with an **Apollo lead export** (columns `Email`, `First Name`, `Company Name`, `Title`, `Industry`, `Company Short Description`). Then add three tracking columns: `status`, `sent_at`, `subject_sent` (leave them empty). Paste the Sheet ID into both Google Sheets nodes.\n3. Edit the four config lines at the top of the **Build Email** node (your name, offer, proof, guarantee).\n4. Add SPF, DKIM and DMARC to your domain, then send one test email to yourself before going live.\n\n### Customization\nAdjust the ramp caps in the **Decide** node and the sending window in the **Schedule** node.",
+        "content": "## Cold email sender with AI personalization and a safe warm-up\n\nSends one personalized cold email at a time from Gmail, lifting the daily volume gradually so a fresh domain does not get flagged. Each email is written by Claude from the lead's own company details, and every send is logged back to the sheet so no one is contacted twice.\n\n### How it works\n- Triggers every 35 minutes, weekdays 9am to 4pm.\n- The daily limit grows from 5 emails in week 1 to 15 by week 4, which keeps a new inbox safe.\n- Each run takes the next un-emailed lead, asks Claude for a 3 to 4 sentence plain-text email, sends it, and writes the time and subject back to the row.\n- A short random wait after each send keeps the rhythm human.\n\n### Setup\n1. Connect Gmail, Google Sheets, and an Anthropic credential (Header Auth, header name `x-api-key`).\n2. Use a Google Sheet of leads. An Apollo export works as-is (`Email`, `First Name`, `Company Name`, `Title`, `Company Short Description`). Add three empty columns: `status`, `sent_at`, `subject_sent`. Paste the Sheet ID into both Sheets nodes.\n3. Set your name and offer in the four lines at the top of the **Build prompt** node.\n4. Add SPF, DKIM and DMARC to your domain and send yourself a test before going live.\n\n### Customization\nThe daily limits live in the **Pick next lead** node. The schedule and send window are in the trigger.",
         "height": 700,
         "width": 480
       },
@@ -249,7 +249,7 @@
     },
     {
       "parameters": {
-        "content": "## Personalized outreach, one lead at a time\nPicks the next un-contacted lead within today's ramp cap, writes a tailored email with AI, sends it, and marks the row so it is never emailed twice.",
+        "content": "## One lead per run\nReads the sheet, picks the next person who has not been emailed yet while under today's limit, writes their email, sends it, and marks the row.",
         "height": 380,
         "width": 2240,
         "color": 7
@@ -265,106 +265,106 @@
     }
   ],
   "connections": {
-    "Schedule - Send Window": {
+    "Every 35 min (weekdays 9-4)": {
       "main": [
         [
           {
-            "node": "Get Leads",
+            "node": "Get leads",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Get Leads": {
+    "Get leads": {
       "main": [
         [
           {
-            "node": "Decide",
+            "node": "Pick next lead",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Decide": {
+    "Pick next lead": {
       "main": [
         [
           {
-            "node": "Allowed to send?",
+            "node": "Within daily limit?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Allowed to send?": {
+    "Within daily limit?": {
       "main": [
         [
           {
-            "node": "Build Email",
+            "node": "Build prompt",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Stop for now",
+            "node": "Nothing to send",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build Email": {
+    "Build prompt": {
       "main": [
         [
           {
-            "node": "Write Email (Claude)",
+            "node": "Write email (Claude)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Write Email (Claude)": {
+    "Write email (Claude)": {
       "main": [
         [
           {
-            "node": "Parse",
+            "node": "Get subject & body",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Parse": {
+    "Get subject & body": {
       "main": [
         [
           {
-            "node": "Send via Gmail",
+            "node": "Send email",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Send via Gmail": {
+    "Send email": {
       "main": [
         [
           {
-            "node": "Mark Lead as Sent",
+            "node": "Mark row as sent",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Mark Lead as Sent": {
+    "Mark row as sent": {
       "main": [
         [
           {
-            "node": "Human Jitter",
+            "node": "Wait (random)",
             "type": "main",
             "index": 0
           }
