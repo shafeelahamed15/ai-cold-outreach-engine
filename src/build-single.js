@@ -111,7 +111,7 @@ Sends personalized cold emails from Gmail / Google Workspace and **ramps volume 
 
 ### Setup
 1. Connect **Gmail**, **Google Sheets**, and an **Anthropic** credential (HTTP Header Auth, name \`x-api-key\`).
-2. Create a Google Sheet with a \`Leads\` tab and these columns: \`email\`, \`first_name\`, \`company\`, \`title\`, \`industry\`, \`company_description\`, \`status\`, \`sent_at\`, \`subject_sent\`. Paste its ID into both Google Sheets nodes.
+2. Create a Google Sheet with a \`Leads\` tab. It works out of the box with an **Apollo lead export** (columns \`Email\`, \`First Name\`, \`Company Name\`, \`Title\`, \`Industry\`, \`Company Short Description\`). Then add three tracking columns: \`status\`, \`sent_at\`, \`subject_sent\` (leave them empty). Paste the Sheet ID into both Google Sheets nodes.
 3. Edit the four config lines at the top of the **Build Email** node (your name, offer, proof, guarantee).
 4. Add SPF, DKIM and DMARC to your domain, then send one test email to yourself before going live.
 

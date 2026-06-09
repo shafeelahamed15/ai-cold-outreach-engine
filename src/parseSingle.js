@@ -9,9 +9,9 @@ try { p = JSON.parse(text); } catch (e) { p = { subject: 'quick question', body:
 const d = $('Decide').item.json;
 const lead = d.lead || {};
 return [{ json: {
-  to: lead.email,
-  first_name: lead.first_name || '',
-  company: lead.company || '',
+  to: lead['Email'],
+  first_name: lead['First Name'] || '',
+  company: lead['Company Name'] || '',
   row_number: d.row_number,
   subject: String(p.subject || 'quick question').slice(0, 120),
   body: String(p.body || '').trim()

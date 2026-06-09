@@ -29,11 +29,11 @@ Output STRICT JSON only, no markdown, exactly:
 The subject must be casual, lowercase-ish, under 5 words, and must not look like an ad.`;
 
 const userMsg = `Write the cold email now for this lead.
-First name: ${lead.first_name || 'there'}
-Company: ${lead.company || ''}
-Title: ${lead.title || ''}
-Industry: ${lead.industry || ''}
-Company description (use this for the personalized opening line): ${lead.company_description || 'no description available'}
+First name: ${lead['First Name'] || 'there'}
+Company: ${lead['Company Name'] || ''}
+Title: ${lead['Title'] || ''}
+Industry: ${lead['Industry'] || ''}
+Company description (use this for the personalized opening line): ${lead['Company Short Description'] || lead['Headline'] || 'no description available'}
 
 If no company description is available, open with a genuine line based on their title or industry instead. Keep it to 3 or 4 short sentences. No em-dashes. Sign off as ${SENDER_NAME}.`;
 

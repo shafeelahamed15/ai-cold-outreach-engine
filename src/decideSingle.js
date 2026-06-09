@@ -21,7 +21,7 @@ if (sentToday >= cap) {
 // Pick the next lead that has not been contacted yet, with a valid email.
 const next = rows.find(r => {
   const status = String(r.status || '').trim().toLowerCase();
-  const email = String(r.email || '').trim();
+  const email = String(r['Email'] || '').trim();
   return email.includes('@') && (status === '' || status === 'pending');
 });
 if (!next) {
