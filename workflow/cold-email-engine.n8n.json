@@ -18,7 +18,7 @@
       "typeVersion": 1.2,
       "position": [
         0,
-        300
+        0
       ]
     },
     {
@@ -41,7 +41,7 @@
       "typeVersion": 4.5,
       "position": [
         220,
-        300
+        0
       ]
     },
     {
@@ -54,7 +54,7 @@
       "typeVersion": 2,
       "position": [
         440,
-        300
+        0
       ]
     },
     {
@@ -87,7 +87,7 @@
       "typeVersion": 2,
       "position": [
         660,
-        300
+        0
       ]
     },
     {
@@ -100,7 +100,7 @@
       "typeVersion": 2,
       "position": [
         880,
-        200
+        0
       ]
     },
     {
@@ -133,7 +133,7 @@
       "typeVersion": 4.2,
       "position": [
         1100,
-        200
+        0
       ]
     },
     {
@@ -146,7 +146,7 @@
       "typeVersion": 2,
       "position": [
         1320,
-        200
+        0
       ]
     },
     {
@@ -167,7 +167,7 @@
       "typeVersion": 2.1,
       "position": [
         1540,
-        200
+        0
       ]
     },
     {
@@ -227,7 +227,7 @@
       "typeVersion": 3.4,
       "position": [
         1760,
-        200
+        0
       ]
     },
     {
@@ -258,7 +258,7 @@
       "typeVersion": 4.5,
       "position": [
         1980,
-        200
+        0
       ]
     },
     {
@@ -272,7 +272,7 @@
       "typeVersion": 1.1,
       "position": [
         2200,
-        200
+        0
       ],
       "webhookId": "wait-new-wh"
     },
@@ -284,7 +284,7 @@
       "typeVersion": 1,
       "position": [
         880,
-        380
+        150
       ]
     },
     {
@@ -304,7 +304,7 @@
       "typeVersion": 1.2,
       "position": [
         0,
-        720
+        440
       ]
     },
     {
@@ -327,7 +327,7 @@
       "typeVersion": 4.5,
       "position": [
         220,
-        720
+        440
       ]
     },
     {
@@ -340,7 +340,7 @@
       "typeVersion": 2,
       "position": [
         440,
-        720
+        440
       ]
     },
     {
@@ -373,7 +373,7 @@
       "typeVersion": 2,
       "position": [
         660,
-        720
+        440
       ]
     },
     {
@@ -386,7 +386,7 @@
       "typeVersion": 2,
       "position": [
         880,
-        620
+        440
       ]
     },
     {
@@ -419,7 +419,7 @@
       "typeVersion": 4.2,
       "position": [
         1100,
-        620
+        440
       ]
     },
     {
@@ -432,7 +432,7 @@
       "typeVersion": 2,
       "position": [
         1320,
-        620
+        440
       ]
     },
     {
@@ -452,7 +452,7 @@
       "typeVersion": 2.1,
       "position": [
         1540,
-        620
+        440
       ]
     },
     {
@@ -494,7 +494,7 @@
       "typeVersion": 3.4,
       "position": [
         1760,
-        620
+        440
       ]
     },
     {
@@ -525,7 +525,7 @@
       "typeVersion": 4.5,
       "position": [
         1980,
-        620
+        440
       ]
     },
     {
@@ -539,7 +539,7 @@
       "typeVersion": 1.1,
       "position": [
         2200,
-        620
+        440
       ],
       "webhookId": "wait-follow-up-wh"
     },
@@ -551,7 +551,7 @@
       "typeVersion": 1,
       "position": [
         880,
-        800
+        590
       ]
     },
     {
@@ -571,7 +571,7 @@
       "typeVersion": 1.2,
       "position": [
         0,
-        1120
+        880
       ]
     },
     {
@@ -591,7 +591,7 @@
       "typeVersion": 2.1,
       "position": [
         220,
-        1120
+        880
       ]
     },
     {
@@ -604,7 +604,7 @@
       "typeVersion": 2,
       "position": [
         440,
-        1120
+        880
       ]
     },
     {
@@ -627,7 +627,7 @@
       "typeVersion": 4.5,
       "position": [
         660,
-        1120
+        880
       ]
     },
     {
@@ -640,7 +640,7 @@
       "typeVersion": 2,
       "position": [
         880,
-        1120
+        880
       ]
     },
     {
@@ -671,71 +671,70 @@
       "typeVersion": 4.5,
       "position": [
         1100,
-        1120
+        880
       ]
     },
     {
       "parameters": {
-        "content": "## Cold Email Automation (Safe Ramp + AI + Follow-ups)\n\nSends personalized cold emails from Gmail/Google Workspace, ramping volume up safely so the account is not burned. Writes each email with Claude, runs a 3-step sequence, and auto-detects replies.\n\n### Setup (read SETUP-GUIDE)\n1. Connect credentials: **Gmail OAuth2**, **Google Sheets OAuth2**, and a **Header Auth** for Anthropic (name `x-api-key`, value = your API key).\n2. Paste your **Google Sheet ID** into every Google Sheets node (replace `PASTE_YOUR_GOOGLE_SHEET_ID`).\n3. Edit the 4 CONFIG lines at the top of **Build Initial Email** (and the name in **Build Follow-up Email**).\n4. Set up SPF + DKIM + DMARC on your domain before sending.\n5. Test once to yourself, then toggle the workflow **Active**.",
-        "height": 520,
-        "width": 320,
-        "color": 6
+        "content": "## 📧 Self-Warming AI Cold Email Engine\n\nSends personalized cold emails from Gmail / Google Workspace and **ramps volume up slowly** so your domain is not flagged as spam. Claude writes every email, follow-ups are sequenced automatically, and replies are detected so people who respond stop receiving messages.\n\n### How it works\n- **Row 1 – New outreach:** every 35 min on weekdays, picks the next un-contacted lead within a daily cap that ramps from 5 to 15 per day over four weeks, writes a short personalized email, sends it, and marks the row.\n- **Row 2 – Follow-ups:** chases non-repliers. Email 2 goes out 3 days later, email 3 after 4 more, each as a reply in the same thread.\n- **Row 3 – Reply detection:** scans the inbox a few times a day and marks anyone who replied so they exit the sequence. A shared daily cap across all rows protects your sender reputation.\n\n### Setup\n1. Connect **Gmail**, **Google Sheets**, and an **Anthropic** credential (HTTP Header Auth, name `x-api-key`).\n2. Copy the Google Sheet template from the workflow description and paste its ID into the three Google Sheets nodes.\n3. Edit the four config lines at the top of the **Build Initial Email** node (name, offer, proof, guarantee).\n4. Add SPF, DKIM and DMARC to your domain, then send one test email to yourself.\n5. Activate the workflow.\n\n### Customization\nChange the ramp caps in the **Decide** nodes, the follow-up delays in **Decide Follow-up**, and the sending window in the **Schedule** nodes.",
+        "height": 760,
+        "width": 480
       },
-      "id": "note-intro",
-      "name": "Note - Intro",
+      "id": "overview",
+      "name": "Overview",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -360,
-        180
+        -560,
+        -180
       ]
     },
     {
       "parameters": {
-        "content": "### 1) NEW OUTREACH\nEvery 35 min on weekdays 9am-4pm: picks the next new lead (within the daily ramp cap), writes a 3-4 sentence email, sends it, and marks the row stage 1 / active.",
-        "height": 120,
-        "width": 320,
-        "color": 4
+        "content": "## 1. New outreach  ·  every 35 min, weekdays\nPicks the next new lead within today's ramp cap, writes a personalized email with AI, sends it, and records it on the row.",
+        "height": 380,
+        "width": 2460,
+        "color": 7
       },
-      "id": "note-flow1",
-      "name": "Note - Flow1",
+      "id": "section-new-outreach",
+      "name": "Section - New Outreach",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        880,
-        60
+        -40,
+        -160
       ]
     },
     {
       "parameters": {
-        "content": "### 2) FOLLOW-UPS\nPicks leads that have not replied and are due (3 days after email 1, then 4 days after email 2). Sends a short follow-up as a reply in the SAME thread. After email 3, the lead is marked done.",
-        "height": 130,
-        "width": 340,
-        "color": 4
+        "content": "## 2. Follow-ups\nChases leads who have not replied: email 2 after 3 days, email 3 after 4 more, each sent as a reply in the same thread.",
+        "height": 380,
+        "width": 2460,
+        "color": 7
       },
-      "id": "note-flow2",
-      "name": "Note - Flow2",
+      "id": "section-follow-ups",
+      "name": "Section - Follow-ups",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        880,
-        470
+        -40,
+        280
       ]
     },
     {
       "parameters": {
-        "content": "### 3) REPLY DETECTION\nA few times a day, scans the inbox for replies. Any lead who replied is marked `replied` so the follow-up flow stops emailing them.",
-        "height": 110,
-        "width": 320,
-        "color": 5
+        "content": "## 3. Reply detection\nScans the inbox and marks anyone who replied as `replied` so they drop out of the follow-up sequence.",
+        "height": 340,
+        "width": 1340,
+        "color": 7
       },
-      "id": "note-flow3",
-      "name": "Note - Flow3",
+      "id": "section-reply-detection",
+      "name": "Section - Reply Detection",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        220,
-        980
+        -40,
+        720
       ]
     }
   ],
@@ -1037,6 +1036,6 @@
   "active": false,
   "pinData": {},
   "meta": {
-    "templatecredstorerrorsignal": false
+    "templateCredsSetupCompleted": false
   }
 }

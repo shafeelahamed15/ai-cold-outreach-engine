@@ -1,4 +1,6 @@
 // Assembles the full n8n cold-email template (3 flows) into one valid JSON file.
+// Layout follows n8n template guidelines: one yellow overview sticky (top-left) +
+// white section stickies behind each flow. Nodes are evenly spaced on clean rows.
 const fs = require('fs');
 const path = require('path');
 const S = f => fs.readFileSync(path.join(__dirname, f), 'utf8');
@@ -118,24 +120,30 @@ const noop = (name, pos) => ({
   parameters: {}, id: idify(name), name, type: 'n8n-nodes-base.noOp', typeVersion: 1, position: pos,
 });
 
-const sticky = (name, content, pos, w, h, color) => ({
-  parameters: { content, height: h, width: w, color: color || 4 },
-  id: idify(name), name: name, type: 'n8n-nodes-base.stickyNote', typeVersion: 1, position: pos,
-});
+// Sticky factory. Omit `color` for the default YELLOW overview sticky; pass a color
+// integer (7 = grey/white) for the section panels behind node groups.
+const sticky = (name, content, pos, w, h, color) => {
+  const parameters = { content, height: h, width: w };
+  if (color !== undefined) parameters.color = color;
+  return { parameters, id: idify(name), name, type: 'n8n-nodes-base.stickyNote', typeVersion: 1, position: pos };
+};
 
 const a = (name, type, value) => ({ id: idify(name), name, type, value });
 
 // ---- nodes ----
+const ROW1 = 0, ROW2 = 440, ROW3 = 880;   // one clean row per flow
+const X = i => i * 220;                    // even horizontal spacing
+
 const nodes = [
-  // FLOW 1 — initial outreach
-  schedule('Schedule - New Outreach', '*/35 9-16 * * 1-5', [0, 300]),
-  sheetsRead('Get Leads (New)', [220, 300]),
-  codeNode('Decide Initial', 'decideInitial.js', [440, 300]),
-  ifProceed('Allowed to send?', [660, 300]),
-  codeNode('Build Initial Email', 'buildInitial.js', [880, 200]),
-  claude('Claude - Initial', [1100, 200]),
-  codeNode('Parse Initial', 'parseInitial.js', [1320, 200]),
-  gmailSend('Send New Email', [1540, 200]),
+  // ===== FLOW 1 — initial outreach (row 1) =====
+  schedule('Schedule - New Outreach', '*/35 9-16 * * 1-5', [X(0), ROW1]),
+  sheetsRead('Get Leads (New)', [X(1), ROW1]),
+  codeNode('Decide Initial', 'decideInitial.js', [X(2), ROW1]),
+  ifProceed('Allowed to send?', [X(3), ROW1]),
+  codeNode('Build Initial Email', 'buildInitial.js', [X(4), ROW1]),
+  claude('Claude - Initial', [X(5), ROW1]),
+  codeNode('Parse Initial', 'parseInitial.js', [X(6), ROW1]),
+  gmailSend('Send New Email', [X(7), ROW1]),
   setNode('Prep Update (Initial)', [
     a('row_number', 'number', "={{ $('Parse Initial').item.json.row_number }}"),
     a('status', 'string', 'active'),
@@ -144,52 +152,76 @@ const nodes = [
     a('thread_id', 'string', '={{ $json.threadId }}'),
     a('message_id', 'string', '={{ $json.id }}'),
     a('subject_sent', 'string', "={{ $('Parse Initial').item.json.subject }}"),
-  ], [1760, 200]),
-  sheetsUpdate('Update Sheet (Initial)', [1980, 200]),
-  wait('Wait (New)', [2200, 200]),
-  noop('Stop (New)', [880, 380]),
+  ], [X(8), ROW1]),
+  sheetsUpdate('Update Sheet (Initial)', [X(9), ROW1]),
+  wait('Wait (New)', [X(10), ROW1]),
+  noop('Stop (New)', [X(4), ROW1 + 150]),
 
-  // FLOW 2 — follow-ups
-  schedule('Schedule - Follow-ups', '*/40 9-16 * * 1-5', [0, 720]),
-  sheetsRead('Get Leads (Follow-up)', [220, 720]),
-  codeNode('Decide Follow-up', 'decideFollowup.js', [440, 720]),
-  ifProceed('Follow-up due?', [660, 720]),
-  codeNode('Build Follow-up Email', 'buildFollowup.js', [880, 620]),
-  claude('Claude - Follow-up', [1100, 620]),
-  codeNode('Parse Follow-up', 'parseFollowup.js', [1320, 620]),
-  gmailReply('Send Reply', [1540, 620]),
+  // ===== FLOW 2 — follow-ups (row 2) =====
+  schedule('Schedule - Follow-ups', '*/40 9-16 * * 1-5', [X(0), ROW2]),
+  sheetsRead('Get Leads (Follow-up)', [X(1), ROW2]),
+  codeNode('Decide Follow-up', 'decideFollowup.js', [X(2), ROW2]),
+  ifProceed('Follow-up due?', [X(3), ROW2]),
+  codeNode('Build Follow-up Email', 'buildFollowup.js', [X(4), ROW2]),
+  claude('Claude - Follow-up', [X(5), ROW2]),
+  codeNode('Parse Follow-up', 'parseFollowup.js', [X(6), ROW2]),
+  gmailReply('Send Reply', [X(7), ROW2]),
   setNode('Prep Update (Follow-up)', [
     a('row_number', 'number', "={{ $('Parse Follow-up').item.json.row_number }}"),
     a('stage', 'number', "={{ $('Parse Follow-up').item.json.next_stage }}"),
     a('status', 'string', "={{ $('Parse Follow-up').item.json.next_stage >= 3 ? 'done' : 'active' }}"),
     a('last_sent_at', 'string', '={{ $now.toISO() }}'),
-  ], [1760, 620]),
-  sheetsUpdate('Update Sheet (Follow-up)', [1980, 620]),
-  wait('Wait (Follow-up)', [2200, 620]),
-  noop('Stop (Follow-up)', [880, 800]),
+  ], [X(8), ROW2]),
+  sheetsUpdate('Update Sheet (Follow-up)', [X(9), ROW2]),
+  wait('Wait (Follow-up)', [X(10), ROW2]),
+  noop('Stop (Follow-up)', [X(4), ROW2 + 150]),
 
-  // FLOW 3 — reply detection sweep
-  schedule('Schedule - Reply Check', '0 10,13,16 * * 1-5', [0, 1120]),
-  gmailGetRecent('Get Recent Inbox', [220, 1120]),
-  codeNode('Extract Reply Senders', 'extractSenders.js', [440, 1120]),
-  sheetsRead('Get Leads (Replies)', [660, 1120]),
-  codeNode('Match Repliers', 'matchRepliers.js', [880, 1120]),
-  sheetsUpdate('Mark as Replied', [1100, 1120]),
+  // ===== FLOW 3 — reply detection (row 3) =====
+  schedule('Schedule - Reply Check', '0 10,13,16 * * 1-5', [X(0), ROW3]),
+  gmailGetRecent('Get Recent Inbox', [X(1), ROW3]),
+  codeNode('Extract Reply Senders', 'extractSenders.js', [X(2), ROW3]),
+  sheetsRead('Get Leads (Replies)', [X(3), ROW3]),
+  codeNode('Match Repliers', 'matchRepliers.js', [X(4), ROW3]),
+  sheetsUpdate('Mark as Replied', [X(5), ROW3]),
 
-  // Sticky notes
-  sticky('Note - Intro',
-    '## Cold Email Automation (Safe Ramp + AI + Follow-ups)\n\n' +
-    'Sends personalized cold emails from Gmail/Google Workspace, ramping volume up safely so the account is not burned. Writes each email with Claude, runs a 3-step sequence, and auto-detects replies.\n\n' +
-    '### Setup (read SETUP-GUIDE)\n' +
-    '1. Connect credentials: **Gmail OAuth2**, **Google Sheets OAuth2**, and a **Header Auth** for Anthropic (name `x-api-key`, value = your API key).\n' +
-    '2. Paste your **Google Sheet ID** into every Google Sheets node (replace `PASTE_YOUR_GOOGLE_SHEET_ID`).\n' +
-    '3. Edit the 4 CONFIG lines at the top of **Build Initial Email** (and the name in **Build Follow-up Email**).\n' +
-    '4. Set up SPF + DKIM + DMARC on your domain before sending.\n' +
-    '5. Test once to yourself, then toggle the workflow **Active**.',
-    [-360, 180], 320, 520, 6),
-  sticky('Note - Flow1', '### 1) NEW OUTREACH\nEvery 35 min on weekdays 9am-4pm: picks the next new lead (within the daily ramp cap), writes a 3-4 sentence email, sends it, and marks the row stage 1 / active.', [880, 60], 320, 120, 4),
-  sticky('Note - Flow2', '### 2) FOLLOW-UPS\nPicks leads that have not replied and are due (3 days after email 1, then 4 days after email 2). Sends a short follow-up as a reply in the SAME thread. After email 3, the lead is marked done.', [880, 470], 340, 130, 4),
-  sticky('Note - Flow3', '### 3) REPLY DETECTION\nA few times a day, scans the inbox for replies. Any lead who replied is marked `replied` so the follow-up flow stops emailing them.', [220, 980], 320, 110, 5),
+  // ===== Sticky notes =====
+  // (1) Main overview — YELLOW (color omitted = default yellow), top-left.
+  sticky('Overview',
+`## 📧 Self-Warming AI Cold Email Engine
+
+Sends personalized cold emails from Gmail / Google Workspace and **ramps volume up slowly** so your domain is not flagged as spam. Claude writes every email, follow-ups are sequenced automatically, and replies are detected so people who respond stop receiving messages.
+
+### How it works
+- **Row 1 – New outreach:** every 35 min on weekdays, picks the next un-contacted lead within a daily cap that ramps from 5 to 15 per day over four weeks, writes a short personalized email, sends it, and marks the row.
+- **Row 2 – Follow-ups:** chases non-repliers. Email 2 goes out 3 days later, email 3 after 4 more, each as a reply in the same thread.
+- **Row 3 – Reply detection:** scans the inbox a few times a day and marks anyone who replied so they exit the sequence. A shared daily cap across all rows protects your sender reputation.
+
+### Setup
+1. Connect **Gmail**, **Google Sheets**, and an **Anthropic** credential (HTTP Header Auth, name \`x-api-key\`).
+2. Copy the Google Sheet template from the workflow description and paste its ID into the three Google Sheets nodes.
+3. Edit the four config lines at the top of the **Build Initial Email** node (name, offer, proof, guarantee).
+4. Add SPF, DKIM and DMARC to your domain, then send one test email to yourself.
+5. Activate the workflow.
+
+### Customization
+Change the ramp caps in the **Decide** nodes, the follow-up delays in **Decide Follow-up**, and the sending window in the **Schedule** nodes.`,
+    [-560, -180], 480, 760),
+
+  // (2) Section panels — grey/white (color 7), sized to sit behind each flow's nodes.
+  sticky('Section - New Outreach',
+`## 1. New outreach  ·  every 35 min, weekdays
+Picks the next new lead within today's ramp cap, writes a personalized email with AI, sends it, and records it on the row.`,
+    [X(0) - 40, ROW1 - 160], 2460, 380, 7),
+
+  sticky('Section - Follow-ups',
+`## 2. Follow-ups
+Chases leads who have not replied: email 2 after 3 days, email 3 after 4 more, each sent as a reply in the same thread.`,
+    [X(0) - 40, ROW2 - 160], 2460, 380, 7),
+
+  sticky('Section - Reply Detection',
+`## 3. Reply detection
+Scans the inbox and marks anyone who replied as \`replied\` so they drop out of the follow-up sequence.`,
+    [X(0) - 40, ROW3 - 160], 1340, 340, 7),
 ];
 
 // ---- connections ----
@@ -226,7 +258,7 @@ const workflow = {
   settings: { executionOrder: 'v1', timezone: 'America/New_York' },
   active: false,
   pinData: {},
-  meta: { templatecredstorerrorsignal: false },
+  meta: { templateCredsSetupCompleted: false },
 };
 
 const out = path.join(__dirname, '..', 'workflow', 'cold-email-engine.n8n.json');
