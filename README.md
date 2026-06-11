@@ -65,9 +65,7 @@ flowchart TD
     DB -.-> C4
 ```
 
-| | The sender | The follow-ups | Reply detection |
-|---|---|---|---|
-| ![Sender](assets/flow-sender.png) | ![Follow-ups](assets/flow-followups.png) | ![Replies](assets/flow-replies.png) |
+> All three flows live on a single n8n canvas (see the [overview image](assets/workflow-overview.png) at the top), sharing the Google Sheet as their source of truth.
 
 ### The state machine
 Each lead row moves through a simple, idempotent lifecycle — which is what makes it safe to run unattended:
