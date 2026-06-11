@@ -244,11 +244,19 @@
           "mode": "name"
         },
         "columns": {
-          "mappingMode": "autoMapInputData",
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "status": "={{ $json.status }}",
+            "stage": "={{ $json.stage }}",
+            "last_sent_at": "={{ $json.last_sent_at }}",
+            "thread_id": "={{ $json.thread_id }}",
+            "message_id": "={{ $json.message_id }}",
+            "subject_sent": "={{ $json.subject_sent }}"
+          },
           "matchingColumns": [
             "row_number"
-          ],
-          "value": {}
+          ]
         },
         "options": {}
       },
@@ -511,11 +519,16 @@
           "mode": "name"
         },
         "columns": {
-          "mappingMode": "autoMapInputData",
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "stage": "={{ $json.stage }}",
+            "status": "={{ $json.status }}",
+            "last_sent_at": "={{ $json.last_sent_at }}"
+          },
           "matchingColumns": [
             "row_number"
-          ],
-          "value": {}
+          ]
         },
         "options": {}
       },
@@ -657,11 +670,14 @@
           "mode": "name"
         },
         "columns": {
-          "mappingMode": "autoMapInputData",
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "status": "={{ $json.status }}"
+          },
           "matchingColumns": [
             "row_number"
-          ],
-          "value": {}
+          ]
         },
         "options": {}
       },

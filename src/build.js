@@ -27,12 +27,12 @@ const sheetsRead = (name, pos) => ({
   id: idify(name), name, type: 'n8n-nodes-base.googleSheets', typeVersion: 4.5, position: pos,
 });
 
-const sheetsUpdate = (name, pos) => ({
+const sheetsUpdate = (name, value, pos) => ({
   parameters: {
     operation: 'update',
     documentId: { __rl: true, value: 'PASTE_YOUR_GOOGLE_SHEET_ID', mode: 'id' },
     sheetName: { __rl: true, value: 'Leads', mode: 'name' },
-    columns: { mappingMode: 'autoMapInputData', matchingColumns: ['row_number'], value: {} },
+    columns: { mappingMode: 'defineBelow', value, matchingColumns: ['row_number'] },
     options: {},
   },
   id: idify(name), name, type: 'n8n-nodes-base.googleSheets', typeVersion: 4.5, position: pos,
@@ -153,7 +153,11 @@ const nodes = [
     a('message_id', 'string', '={{ $json.id }}'),
     a('subject_sent', 'string', "={{ $('Parse Initial').item.json.subject }}"),
   ], [X(8), ROW1]),
-  sheetsUpdate('Update Sheet (Initial)', [X(9), ROW1]),
+  sheetsUpdate('Update Sheet (Initial)', {
+    row_number: '={{ $json.row_number }}', status: '={{ $json.status }}', stage: '={{ $json.stage }}',
+    last_sent_at: '={{ $json.last_sent_at }}', thread_id: '={{ $json.thread_id }}',
+    message_id: '={{ $json.message_id }}', subject_sent: '={{ $json.subject_sent }}',
+  }, [X(9), ROW1]),
   wait('Wait (New)', [X(10), ROW1]),
   noop('Stop (New)', [X(4), ROW1 + 150]),
 
@@ -172,7 +176,10 @@ const nodes = [
     a('status', 'string', "={{ $('Parse Follow-up').item.json.next_stage >= 3 ? 'done' : 'active' }}"),
     a('last_sent_at', 'string', '={{ $now.toISO() }}'),
   ], [X(8), ROW2]),
-  sheetsUpdate('Update Sheet (Follow-up)', [X(9), ROW2]),
+  sheetsUpdate('Update Sheet (Follow-up)', {
+    row_number: '={{ $json.row_number }}', stage: '={{ $json.stage }}',
+    status: '={{ $json.status }}', last_sent_at: '={{ $json.last_sent_at }}',
+  }, [X(9), ROW2]),
   wait('Wait (Follow-up)', [X(10), ROW2]),
   noop('Stop (Follow-up)', [X(4), ROW2 + 150]),
 
@@ -182,7 +189,9 @@ const nodes = [
   codeNode('Extract Reply Senders', 'extractSenders.js', [X(2), ROW3]),
   sheetsRead('Get Leads (Replies)', [X(3), ROW3]),
   codeNode('Match Repliers', 'matchRepliers.js', [X(4), ROW3]),
-  sheetsUpdate('Mark as Replied', [X(5), ROW3]),
+  sheetsUpdate('Mark as Replied', {
+    row_number: '={{ $json.row_number }}', status: '={{ $json.status }}',
+  }, [X(5), ROW3]),
 
   // ===== Sticky notes =====
   // (1) Main overview — YELLOW (color omitted = default yellow), top-left.
